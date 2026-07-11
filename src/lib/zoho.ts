@@ -65,7 +65,11 @@ function zohoErr(status: number, text: string): ZohoError {
 
 /** Extract the `data` array from a Zoho JSON body ([] on any shape mismatch). */
 function zohoData(text: string): ZRec[] {
-  return zohoData(text);
+  try {
+    return ((JSON.parse(text) as { data?: ZRec[] }).data ?? []) as ZRec[];
+  } catch {
+    return [];
+  }
 }
 
 async function zohoCoql(selectQuery: string): Promise<ZRec[]> {
