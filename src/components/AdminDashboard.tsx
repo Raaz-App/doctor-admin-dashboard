@@ -72,25 +72,55 @@ function useDoctors(): { doctors: Doctor[] | null; status: string; patch: (id: s
   return { doctors, status, patch, reload };
 }
 
+const ICONS: Record<string, React.ReactNode> = {
+  home: <><path d="M3 10.6 12 3l9 7.6" /><path d="M5 9.2V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.2" /></>,
+  metrics: <><path d="M4 4v16h16" /><path d="m7 14 3-3.5 3 2 5-6.5" /></>,
+  security: <><path d="M12 3l7 3v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6z" /><path d="m9.4 12 1.8 1.8 3.4-3.8" /></>,
+};
+function Icon({ name }: { name: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {ICONS[name]}
+    </svg>
+  );
+}
+
+const NAV = [
+  { k: "home", label: "Home", icon: "home", title: "Overview", sub: "Live operational totals across every doctor." },
+  { k: "metrics", label: "Metrics", icon: "metrics", title: "Metrics", sub: "Per-doctor performance and wait-time analytics." },
+  { k: "security", label: "Security", icon: "security", title: "Access & credentials", sub: "Manage the dashboard roster and doctor logins." },
+] as const;
+
 export function AdminDashboard() {
   const [tab, setTab] = useState<"home" | "metrics" | "security">("home");
   const [focusDoctorId, setFocusDoctorId] = useState<string | null>(null);
-  const NAV = [
-    { k: "home", label: "Home", icon: "🏠" },
-    { k: "metrics", label: "Metrics", icon: "📊" },
-    { k: "security", label: "Security", icon: "🔑" },
-  ] as const;
+  const cur = NAV.find((n) => n.k === tab)!;
   return (
     <div className="shell">
       <aside className="sidenav">
-        {NAV.map((n) => (
-          <button key={n.k} type="button" className={"navitem" + (tab === n.k ? " navitem--on" : "")} onClick={() => setTab(n.k)}>
-            <span className="navitem__ic" aria-hidden="true">{n.icon}</span>
-            <span className="navitem__lbl">{n.label}</span>
-          </button>
-        ))}
+        <div className="brand">
+          <div className="brand__mark">R</div>
+          <div>
+            <div className="brand__name">Raaz MD</div>
+            <div className="brand__sub">Admin console</div>
+          </div>
+        </div>
+        <div className="navsec">Workspace</div>
+        <nav className="nav">
+          {NAV.map((n) => (
+            <button key={n.k} type="button" className={"navitem" + (tab === n.k ? " navitem--on" : "")} onClick={() => setTab(n.k)}>
+              <span className="navitem__ic"><Icon name={n.icon} /></span>
+              <span className="navitem__lbl">{n.label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="sidefoot"><span className="livedot" aria-hidden="true" /> Live · Zoho CRM</div>
       </aside>
       <main className="content">
+        <header className="pagehead">
+          <h1>{cur.title}</h1>
+          <p>{cur.sub}</p>
+        </header>
         {tab === "home" && <Home />}
         {tab === "metrics" && <MetricsModule focusDoctorId={focusDoctorId} setFocusDoctorId={setFocusDoctorId} />}
         {tab === "security" && <SecurityModule />}
