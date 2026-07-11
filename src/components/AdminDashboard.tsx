@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface Doctor { id: string; name: string; phone: string; loginId: string; hasPassword: boolean; available: boolean }
 interface PatientRow { name: string; colour: "green" | "amber" | "red" | null; status: string; id?: string }
@@ -35,16 +35,18 @@ function fmtMins(m: number | null | undefined): string {
 function useMetrics(): { m: Metrics | null; status: string } {
   const [m, setM] = useState<Metrics | null>(null);
   const [status, setStatus] = useState("Loading…");
+  const seq = useRef(0);
   useEffect(() => {
     let live = true;
     const load = async () => {
+      const my = ++seq.current;
       try {
         const res = await fetch("/api/metrics");
         const data = (await res.json().catch(() => ({}))) as Metrics & { message?: string };
-        if (!live) return;
+        if (!live || my !== seq.current) return; // a newer poll already landed → drop this stale one
         if (res.status !== 200 || !data.totals) setStatus(data.message || "Couldn't load metrics.");
         else setM(data);
-      } catch { if (live) setStatus("Couldn't reach the server."); }
+      } catch { if (live && my === seq.current) setStatus("Couldn't reach the server."); }
     };
     load();
     const id = setInterval(load, 30000);
@@ -201,11 +203,16 @@ function Home() {
 function MetricsModule({ focusDoctorId, setFocusDoctorId }: { focusDoctorId: string | null; setFocusDoctorId: (id: string | null) => void }) {
   const { m, status } = useMetrics();
   const { doctors, patch } = useDoctors();
+  const lastFocus = useRef<DoctorLoad | null>(null);
   if (!m) return <div className={"status" + (status.startsWith("Loading") ? "" : " status--error")}>{status}</div>;
 
-  const focus = focusDoctorId ? m.byDoctor.find((d) => d.id === focusDoctorId) ?? null : null;
+  // Keep the drill-down open across the 30s refresh even if the doctor drops out of byDoctor (e.g. their
+  // last patient got resolved) — fall back to the last-known load rather than snapping back to the table.
+  const live = focusDoctorId ? m.byDoctor.find((d) => d.id === focusDoctorId) ?? null : null;
+  if (live) lastFocus.current = live;
+  const focus = focusDoctorId ? (live ?? (lastFocus.current?.id === focusDoctorId ? lastFocus.current : null)) : null;
   if (focus) {
-    return <DoctorPerformance load={focus} doctors={doctors ?? []} onPatch={patch} onBack={() => setFocusDoctorId(null)} />;
+    return <DoctorPerformance load={focus} doctors={doctors ?? []} onPatch={patch} onBack={() => { lastFocus.current = null; setFocusDoctorId(null); }} />;
   }
   return (
     <div className="panel">
@@ -370,7 +377,7 @@ function SecurityModule() {
         </div>
       </div>
       <div className="detail">
-        {selected ? <DoctorCredentials doctor={selected} onPatch={patch} onRemoved={() => { setSelectedId(null); reload(); }} /> : <div className="panel detail__empty">Select a doctor to manage their login id + password, or add one from the CRM.</div>}
+        {selected ? <DoctorCredentials doctor={selected} onPatch={patch} onRemoved={() => { patch(selected.id, { loginId: "", hasPassword: false }); setSelectedId(null); }} /> : <div className="panel detail__empty">Select a doctor to manage their login id + password, or add one from the CRM.</div>}
       </div>
       {adding && <AddDoctor doctors={doctors} onClose={() => setAdding(false)} onPatch={patch} onAdded={(id) => { reload(); setAdding(false); setSelectedId(id); }} />}
     </div>
@@ -418,7 +425,10 @@ function DoctorCredentials({ doctor, onPatch, onRemoved }: { doctor: Doctor; onP
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  useEffect(() => { setLoginId(doctor.loginId || doctor.phone); setPassword(""); setMsg(null); }, [doctor.id, doctor.loginId, doctor.phone]);
+  // Re-init only when a DIFFERENT doctor is selected — not on same-doctor patches (which would wipe the
+  // "Saved" toast the moment onPatch updates doctor.loginId). doctor.loginId/phone read here intentionally.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setLoginId(doctor.loginId || doctor.phone); setPassword(""); setMsg(null); }, [doctor.id]);
 
   async function post(url: string, body: object) {
     const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });

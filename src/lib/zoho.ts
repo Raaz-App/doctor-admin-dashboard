@@ -219,7 +219,6 @@ export function isScopeError(e: unknown): boolean {
 
 // ── Metrics ─────────────────────────────────────────────────────────────────
 const SLA_HOURS = Number(process.env.SLA_HOURS || 24);
-const ACTIVE_STATUSES = ["Queued", "In Review", "Resolved", "Returned to Concierge"];
 const C_FIELDS = "id,Full_Name,Assigned_Doctor,Dashboard_Status,Triage_Color,Created_Time,Modified_Time";
 const SAMPLE_LIMIT = 200; // most-recent active contacts scanned for metrics
 
@@ -250,17 +249,39 @@ const WAIT_BUCKETS: { label: string; max: number }[] = [
 function istYmd(ms: number): string {
   return new Date(ms + 5.5 * 3600 * 1000).toISOString().slice(0, 10); // IST calendar date
 }
+/** Zoho COQL/Search datetime literal: IST wall-clock, no milliseconds, explicit +05:30 offset. */
+function zohoDateTime(ms: number): string {
+  return new Date(ms + 5.5 * 3600 * 1000).toISOString().replace(/\.\d{3}Z$/, "") + "+05:30";
+}
 
-/** All active dashboard contacts (across every doctor), most-recent first. COQL → Search fallback. */
-async function activeContacts(): Promise<ZRec[]> {
+const DECISION_WINDOW_DAYS = 8; // resolved/returned scanned this far back — covers today + the 7-day chart
+
+/** Currently WAITING patients (Queued / In Review). Ordered OLDEST-first so if the cap is hit it drops
+ *  the newest (not-yet-breaching) rows and KEEPS the oldest — the ones SLA/oldest-wait metrics need. */
+async function waitingContacts(): Promise<ZRec[]> {
   try {
     return await zohoCoql(
       `SELECT ${C_FIELDS.replace(/,/g, ", ")} FROM Contacts ` +
-        `WHERE Dashboard_Status in (${ACTIVE_STATUSES.map((s) => `'${s}'`).join(", ")}) ORDER BY Modified_Time DESC LIMIT ${SAMPLE_LIMIT}`,
+        `WHERE Dashboard_Status in ('Queued', 'In Review') ORDER BY Modified_Time ASC LIMIT ${SAMPLE_LIMIT}`,
     );
   } catch (e) {
     if (!isScopeError(e)) throw e;
-    const crit = `(${ACTIVE_STATUSES.map((s) => `(Dashboard_Status:equals:${s})`).join("or")})`;
+    return await zohoSearch("Contacts", "((Dashboard_Status:equals:Queued)or(Dashboard_Status:equals:In Review))", C_FIELDS);
+  }
+}
+
+/** Recent DECISIONS (Resolved / Returned) within the window — feeds today, throughput, approve rate.
+ *  Kept SEPARATE from the waiting scan so a burst of decisions can't evict long-waiting patients. */
+async function recentDecisions(): Promise<ZRec[]> {
+  const since = zohoDateTime(Date.now() - DECISION_WINDOW_DAYS * 86400000);
+  try {
+    return await zohoCoql(
+      `SELECT ${C_FIELDS.replace(/,/g, ", ")} FROM Contacts ` +
+        `WHERE Dashboard_Status in ('Resolved', 'Returned to Concierge') and Modified_Time >= '${since}' ORDER BY Modified_Time DESC LIMIT ${SAMPLE_LIMIT}`,
+    );
+  } catch (e) {
+    if (!isScopeError(e)) throw e;
+    const crit = `((Dashboard_Status:equals:Resolved)or(Dashboard_Status:equals:Returned to Concierge))and(Modified_Time:greater_equal:${since})`;
     return await zohoSearch("Contacts", crit, C_FIELDS);
   }
 }
@@ -299,7 +320,8 @@ export interface OrgMetrics {
 
 /** Org-wide operational metrics computed from one scan of active contacts + the doctor roster. */
 export async function orgMetrics(): Promise<OrgMetrics> {
-  const [contacts, doctors] = await Promise.all([activeContacts(), listDoctors()]);
+  const [waiting, decisions, doctors] = await Promise.all([waitingContacts(), recentDecisions(), listDoctors()]);
+  const contacts = [...waiting, ...decisions];
   const docMap = new Map(doctors.map((d) => [d.id, d]));
   const load = new Map<string, DoctorLoad>();
   const ensure = (id: string): DoctorLoad => {
@@ -326,12 +348,12 @@ export async function orgMetrics(): Promise<OrgMetrics> {
     const status = String(c.Dashboard_Status ?? "");
     const did = lookupId(c.Assigned_Doctor);
     const l = ensure(did);
-    if (!did) unassigned++;
-    const colour = String(c.Triage_Color ?? "").toLowerCase();
-    if (colour === "green" || colour === "amber" || colour === "red") byColour[colour]++;
-    else byColour.none++;
 
     if (status === "Queued" || status === "In Review") {
+      if (!did) unassigned++; // only LIVE patients matter for "nobody's handling this"
+      const colour = String(c.Triage_Color ?? "").toLowerCase(); // colour mix = the live queue, not decided cases
+      if (colour === "green" || colour === "amber" || colour === "red") byColour[colour]++;
+      else byColour.none++;
       if (status === "Queued") { totals.queued++; l.queued++; } else { totals.inReview++; l.inReview++; }
       l.waiting++;
       const age = minsSince(c.Modified_Time);
@@ -387,7 +409,7 @@ export async function orgMetrics(): Promise<OrgMetrics> {
     doctorsTotal: doctors.length,
     doctorsAvailable: doctors.filter((d) => d.available).length,
     slaHours: SLA_HOURS,
-    sampleCapped: contacts.length >= SAMPLE_LIMIT,
+    sampleCapped: waiting.length >= SAMPLE_LIMIT || decisions.length >= SAMPLE_LIMIT,
     byDoctor: [...load.values()].filter((l) => l.queued + l.inReview + l.resolved + l.rejected > 0).sort((a, b) => b.waiting - a.waiting || b.queued - a.queued || a.name.localeCompare(b.name)),
   };
 }
