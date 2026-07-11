@@ -238,6 +238,15 @@ function minsBetween(startIso: unknown, endIso: unknown): number | null {
 function avg(xs: number[]): number | null {
   return xs.length ? Math.round(xs.reduce((s, x) => s + x, 0) / xs.length) : null;
 }
+function median(xs: number[]): number | null {
+  if (!xs.length) return null;
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid]! : Math.round((s[mid - 1]! + s[mid]!) / 2);
+}
+const WAIT_BUCKETS: { label: string; max: number }[] = [
+  { label: "<1h", max: 60 }, { label: "1–4h", max: 240 }, { label: "4–12h", max: 720 }, { label: "12–24h", max: 1440 }, { label: ">24h", max: Infinity },
+];
 function istYmd(ms: number): string {
   return new Date(ms + 5.5 * 3600 * 1000).toISOString().slice(0, 10); // IST calendar date
 }
@@ -260,23 +269,26 @@ export interface DoctorLoad {
   id: string;
   name: string;
   available: boolean;
-  hasLogin: boolean;
+  managed: boolean;
   queued: number;
   inReview: number;
   resolved: number;
   rejected: number;
   waiting: number;
+  breaching: number;
   avgWaitMins: number | null;
   oldestWaitMins: number | null;
+  approveRatePct: number | null;
 }
 export interface OrgMetrics {
   totals: { queued: number; inReview: number; resolved: number; rejected: number; active: number };
-  waiting: { count: number; avgMins: number | null; maxMins: number | null; breaching: number };
+  waiting: { count: number; avgMins: number | null; medianMins: number | null; maxMins: number | null; breaching: number };
+  waitBuckets: { label: string; count: number }[];
   today: { resolved: number; rejected: number };
   approveRatePct: number | null;
   avgResolveMins: number | null;
   byColour: { green: number; amber: number; red: number; none: number };
-  throughput: { date: string; resolved: number }[];
+  throughput: { date: string; resolved: number; rejected: number }[];
   unassigned: number;
   doctorsTotal: number;
   doctorsAvailable: number;
@@ -294,7 +306,7 @@ export async function orgMetrics(): Promise<OrgMetrics> {
     let l = load.get(id);
     if (!l) {
       const d = docMap.get(id);
-      l = { id, name: d?.name || (id ? "(unknown)" : "Unassigned"), available: d?.available ?? true, hasLogin: Boolean(d?.hasPassword), queued: 0, inReview: 0, resolved: 0, rejected: 0, waiting: 0, avgWaitMins: null, oldestWaitMins: null };
+      l = { id, name: d?.name || (id ? "(unknown)" : "Unassigned"), available: d?.available ?? true, managed: Boolean(d?.loginId), queued: 0, inReview: 0, resolved: 0, rejected: 0, waiting: 0, breaching: 0, avgWaitMins: null, oldestWaitMins: null, approveRatePct: null };
       load.set(id, l);
     }
     return l;
@@ -307,6 +319,7 @@ export async function orgMetrics(): Promise<OrgMetrics> {
   const today = { resolved: 0, rejected: 0 };
   const todayYmd = istYmd(Date.now());
   const tp = new Map<string, number>(); // istYmd → resolved count
+  const tpRej = new Map<string, number>(); // istYmd → rejected count
   let breaching = 0, unassigned = 0;
 
   for (const c of contacts) {
@@ -325,7 +338,7 @@ export async function orgMetrics(): Promise<OrgMetrics> {
       if (age != null) {
         waitAges.push(age);
         (perDoctorWaits.get(did) ?? perDoctorWaits.set(did, []).get(did)!).push(age);
-        if (age > SLA_HOURS * 60) breaching++;
+        if (age > SLA_HOURS * 60) { breaching++; l.breaching++; }
       }
     } else if (status === "Resolved") {
       totals.resolved++; l.resolved++;
@@ -336,7 +349,9 @@ export async function orgMetrics(): Promise<OrgMetrics> {
       if (ymd === todayYmd) today.resolved++;
     } else if (status === "Returned to Concierge") {
       totals.rejected++; l.rejected++;
-      if (istYmd(Date.parse(String(c.Modified_Time ?? "")) || 0) === todayYmd) today.rejected++;
+      const rymd = istYmd(Date.parse(String(c.Modified_Time ?? "")) || 0);
+      tpRej.set(rymd, (tpRej.get(rymd) ?? 0) + 1);
+      if (rymd === todayYmd) today.rejected++;
     }
   }
 
@@ -344,16 +359,25 @@ export async function orgMetrics(): Promise<OrgMetrics> {
     const l = load.get(id);
     if (l) { l.avgWaitMins = avg(ages); l.oldestWaitMins = ages.length ? Math.max(...ages) : null; }
   }
+  for (const l of load.values()) {
+    const dec = l.resolved + l.rejected;
+    l.approveRatePct = dec ? Math.round((l.resolved / dec) * 100) : null;
+  }
 
   const throughput = Array.from({ length: 7 }, (_, i) => {
     const ymd = istYmd(Date.now() - (6 - i) * 86400000);
-    return { date: ymd, resolved: tp.get(ymd) ?? 0 };
+    return { date: ymd, resolved: tp.get(ymd) ?? 0, rejected: tpRej.get(ymd) ?? 0 };
   });
+  const waitBuckets = WAIT_BUCKETS.map((b, i) => ({
+    label: b.label,
+    count: waitAges.filter((a) => a < b.max && a >= (i === 0 ? 0 : WAIT_BUCKETS[i - 1]!.max)).length,
+  }));
   const decided = totals.resolved + totals.rejected;
 
   return {
     totals,
-    waiting: { count: waitAges.length, avgMins: avg(waitAges), maxMins: waitAges.length ? Math.max(...waitAges) : null, breaching },
+    waiting: { count: waitAges.length, avgMins: avg(waitAges), medianMins: median(waitAges), maxMins: waitAges.length ? Math.max(...waitAges) : null, breaching },
+    waitBuckets,
     today,
     approveRatePct: decided ? Math.round((totals.resolved / decided) * 100) : null,
     avgResolveMins: avg(resolveMins),
@@ -401,7 +425,15 @@ export async function reassignPatient(contactId: string, doctorId: string): Prom
 export async function setAvailability(doctorId: string, available: boolean): Promise<void> {
   await zohoUpdate("Doctors", doctorId, { Available: available });
 }
-/** Clear a doctor's custom login → they fall back to phone (id) + name (password). */
-export async function resetCredentials(doctorId: string): Promise<void> {
+/** Add a CRM doctor to the managed roster by seeding a Login_Id (defaults to their phone). */
+export async function addToRoster(doctorId: string, loginId: string): Promise<void> {
+  await zohoUpdate("Doctors", doctorId, { Login_Id: loginId });
+}
+/** Remove a doctor from the managed roster (clear login + password). */
+export async function removeFromRoster(doctorId: string): Promise<void> {
   await zohoUpdate("Doctors", doctorId, { Login_Id: null, Password_Hash: null });
+}
+/** Clear only the password → the doctor logs in with their login id + name (stays on the roster). */
+export async function resetPassword(doctorId: string): Promise<void> {
+  await zohoUpdate("Doctors", doctorId, { Password_Hash: null });
 }

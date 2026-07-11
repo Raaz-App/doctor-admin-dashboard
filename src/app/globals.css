@@ -160,3 +160,59 @@ body {
 .back { align-self: flex-start; border: none; background: none; color: var(--accent); font-family: inherit;
   font-weight: 700; font-size: 14px; cursor: pointer; padding: 4px 0; }
 .cred__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+
+/* info ⓘ tooltip */
+.info { display: inline-block; margin-left: 5px; width: 15px; height: 15px; line-height: 15px; text-align: center;
+  font-size: 10.5px; font-weight: 700; color: var(--muted); background: var(--chip); border-radius: 50%; cursor: help;
+  vertical-align: middle; font-style: normal; }
+.info:hover, .info:focus { background: var(--accent-soft); color: var(--accent); outline: none; }
+.kpi__l { display: flex; align-items: center; }
+
+/* roster header + add button */
+.panel__h--row { display: flex; align-items: center; justify-content: space-between; text-transform: none; letter-spacing: 0; }
+.addbtn { border: 1px solid #cdd9e5; background: #fff; color: var(--accent); border-radius: 8px; padding: 4px 10px;
+  font-family: inherit; font-weight: 700; font-size: 12px; cursor: pointer; }
+.addbtn:hover { background: var(--accent-soft); }
+.btn--sm { padding: 6px 14px; font-size: 13px; }
+.btn--danger { background: #fff; color: var(--brand-red); border: 1px solid #f4c7cb; }
+.btn--danger:hover { background: var(--err-bg); }
+
+/* add-doctor modal */
+.modal { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50; }
+.modal__box { background: var(--card); border-radius: 14px; width: 100%; max-width: 460px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(15,23,42,.3); }
+.modal__h { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--line); font-weight: 700; }
+.modal__x { border: none; background: none; font-size: 16px; color: var(--muted); cursor: pointer; }
+.doclist--modal { max-height: 56vh; }
+.addrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+
+/* ── App shell with left sidebar (Drive/Settings style) ── */
+.app { max-width: 1280px; margin: 0 auto; padding: 0; }
+.shell { display: grid; grid-template-columns: 210px 1fr; align-items: start; min-height: calc(100vh - 52px); }
+.sidenav { position: sticky; top: 0; padding: 18px 12px; display: flex; flex-direction: column; gap: 4px; }
+.navitem { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; border: none; background: none;
+  font-family: inherit; font-size: 14.5px; font-weight: 600; color: var(--fg); padding: 11px 14px; border-radius: 999px; cursor: pointer; }
+.navitem:hover { background: var(--accent-soft); }
+.navitem--on { background: var(--accent-soft); color: var(--accent); font-weight: 800; }
+.navitem__ic { font-size: 17px; width: 20px; text-align: center; }
+.content { padding: 20px 20px 40px; min-width: 0; }
+@media (max-width: 720px) {
+  .shell { grid-template-columns: 1fr; }
+  .sidenav { position: static; flex-direction: row; padding: 10px 12px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+  .navitem { width: auto; white-space: nowrap; }
+  .navitem__lbl { display: inline; }
+}
+
+/* stacked throughput + bad wait bar */
+.spark__bar--bad { background: var(--red); }
+.spark__stack { width: 60%; min-height: 3px; display: flex; flex-direction: column; border-radius: 4px 4px 0 0; overflow: hidden; }
+.spark__seg--res { background: var(--green); }
+.spark__seg--rej { background: var(--red); }
+
+/* horizontal bar chart (waiting by doctor) */
+.hbar { padding: 14px 16px; display: flex; flex-direction: column; gap: 9px; }
+.hbar__row { display: flex; align-items: center; gap: 10px; }
+.hbar__lbl { width: 110px; font-size: 12.5px; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 0 auto; }
+.hbar__track { flex: 1; height: 14px; background: var(--chip); border-radius: 999px; overflow: hidden; }
+.hbar__fill { height: 100%; background: var(--accent); border-radius: 999px; }
+.hbar__fill--bad { background: var(--amber); }
+.hbar__n { width: 24px; text-align: right; font-weight: 700; font-size: 13px; flex: 0 0 auto; }
