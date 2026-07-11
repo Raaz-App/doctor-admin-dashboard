@@ -85,7 +85,7 @@ code { font-family: var(--mono); font-size: .88em; background: var(--chip); padd
 .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
 .kpis--tight { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); }
 .kpi { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 15px 16px; box-shadow: var(--shadow); overflow: hidden; }
+  padding: 15px 16px; box-shadow: var(--shadow); }
 .kpi__v { font-family: var(--mono); font-size: 25px; font-weight: 600; letter-spacing: -.03em; color: var(--ink);
   font-variant-numeric: tabular-nums; line-height: 1.1; }
 .kpi__l { display: flex; align-items: center; font-size: 11px; font-weight: 600; text-transform: uppercase;
@@ -155,10 +155,11 @@ code { font-family: var(--mono); font-size: .88em; background: var(--chip); padd
   width: 15px; height: 15px; font-size: 10.5px; font-weight: 700; font-style: italic; font-family: Georgia, "Times New Roman", serif;
   color: #fff; background: var(--faint); border-radius: 50%; cursor: help; vertical-align: middle; flex: 0 0 auto; transition: background .12s; }
 .info:hover, .info:focus { background: var(--brand); outline: none; }
-.info__pop { position: absolute; bottom: calc(100% + 9px); left: 50%; transform: translateX(-50%); width: 236px; max-width: 62vw;
+.info__pop { position: absolute; top: calc(100% + 9px); left: 50%; transform: translateX(-50%); width: 236px; max-width: 62vw;
   background: var(--ink); color: #eef1f6; font-size: 12px; font-weight: 500; font-style: normal; line-height: 1.5; text-align: left;
+  text-transform: none; letter-spacing: normal; white-space: normal; word-break: normal;
   padding: 10px 12px; border-radius: 9px; box-shadow: var(--shadow-lg); opacity: 0; visibility: hidden; transition: opacity .12s; z-index: 100; pointer-events: none; }
-.info__pop::after { content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: var(--ink); }
+.info__pop::after { content: ""; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-bottom-color: var(--ink); }
 .info:hover .info__pop, .info:focus .info__pop { opacity: 1; visibility: visible; }
 
 /* ── Two-pane (Security) ── */
