@@ -161,11 +161,16 @@ body {
   font-weight: 700; font-size: 14px; cursor: pointer; padding: 4px 0; }
 .cred__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 
-/* info ⓘ tooltip */
-.info { display: inline-block; margin-left: 5px; width: 15px; height: 15px; line-height: 15px; text-align: center;
-  font-size: 10.5px; font-weight: 700; color: var(--muted); background: var(--chip); border-radius: 50%; cursor: help;
-  vertical-align: middle; font-style: normal; }
-.info:hover, .info:focus { background: var(--accent-soft); color: var(--accent); outline: none; }
+/* info badge + hover tooltip */
+.info { position: relative; display: inline-flex; align-items: center; justify-content: center; margin-left: 5px;
+  width: 15px; height: 15px; font-size: 11px; font-weight: 700; font-style: italic; font-family: Georgia, "Times New Roman", serif;
+  color: #fff; background: var(--muted); border-radius: 50%; cursor: help; vertical-align: middle; flex: 0 0 auto; }
+.info:hover, .info:focus { background: var(--accent); outline: none; }
+.info__pop { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); width: 230px; max-width: 62vw;
+  background: #1b2430; color: #fff; font-size: 12px; font-weight: 500; font-style: normal; line-height: 1.45; text-align: left;
+  padding: 9px 11px; border-radius: 8px; box-shadow: 0 8px 24px rgba(15,23,42,.28); opacity: 0; visibility: hidden;
+  transition: opacity .12s; z-index: 100; pointer-events: none; }
+.info:hover .info__pop, .info:focus .info__pop { opacity: 1; visibility: visible; }
 .kpi__l { display: flex; align-items: center; }
 
 /* roster header + add button */

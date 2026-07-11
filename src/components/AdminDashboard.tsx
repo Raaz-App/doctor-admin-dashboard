@@ -101,9 +101,13 @@ export function AdminDashboard() {
 
 /* ─────────────────────────── HOME — combined totals ─────────────────────────── */
 
-/** Small ⓘ that explains how a (possibly non-obvious) metric is calculated. Native title = tooltip. */
+/** Small info badge — hover/focus shows how a metric is calculated (native title + a CSS tooltip). */
 function Info({ text }: { text: string }) {
-  return <span className="info" tabIndex={0} role="img" aria-label={"How it's calculated — " + text} title={text}>ⓘ</span>;
+  return (
+    <span className="info" tabIndex={0} role="note" aria-label={"How it's calculated — " + text} title={text}>
+      i<span className="info__pop">{text}</span>
+    </span>
+  );
 }
 
 function Kpi({ label, value, sub, tone, info }: { label: string; value: React.ReactNode; sub?: string; tone?: "warn" | "good" | "bad"; info?: string }) {
