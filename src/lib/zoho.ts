@@ -56,6 +56,18 @@ function isId(v: unknown): v is string {
   return typeof v === "string" && /^\d{6,}$/.test(v);
 }
 
+/** Best-effort parse of a Zoho error body → ZohoError (extracts the `code` when the body is JSON). */
+function zohoErr(status: number, text: string): ZohoError {
+  let code: string | undefined;
+  try { code = (JSON.parse(text) as ZRec).code as string; } catch { /* non-json */ }
+  return { code, status, detail: text.slice(0, 300) };
+}
+
+/** Extract the `data` array from a Zoho JSON body ([] on any shape mismatch). */
+function zohoData(text: string): ZRec[] {
+  return zohoData(text);
+}
+
 async function zohoCoql(selectQuery: string): Promise<ZRec[]> {
   const token = await accessToken();
   const res = await fetch(`${API}/crm/${VER}/coql`, {
@@ -66,16 +78,8 @@ async function zohoCoql(selectQuery: string): Promise<ZRec[]> {
   });
   if (res.status === 204) return [];
   const text = await res.text();
-  if (!res.ok) {
-    let code: string | undefined;
-    try { code = (JSON.parse(text) as ZRec).code as string; } catch { /* non-json */ }
-    throw { code, status: res.status, detail: text.slice(0, 300) } as ZohoError;
-  }
-  try {
-    return ((JSON.parse(text) as { data?: ZRec[] }).data ?? []) as ZRec[];
-  } catch {
-    return [];
-  }
+  if (!res.ok) throw zohoErr(res.status, text);
+  return zohoData(text);
 }
 
 /** List records via the plain records API (GET). Needs only ZohoCRM.modules.READ — no COQL scope. */
@@ -87,12 +91,8 @@ async function zohoGetRecords(module: string, fields: string, query = ""): Promi
   });
   if (res.status === 204) return [];
   const text = await res.text();
-  if (!res.ok) {
-    let code: string | undefined;
-    try { code = (JSON.parse(text) as ZRec).code as string; } catch { /* non-json */ }
-    throw { code, status: res.status, detail: text.slice(0, 300) } as ZohoError;
-  }
-  try { return ((JSON.parse(text) as { data?: ZRec[] }).data ?? []) as ZRec[]; } catch { return []; }
+  if (!res.ok) throw zohoErr(res.status, text);
+  return zohoData(text);
 }
 
 /** Filtered read via the Search API (GET). Needs only ZohoCRM.modules.READ — the COQL-less fallback. */
@@ -102,12 +102,8 @@ async function zohoSearch(module: string, criteria: string, fields: string): Pro
   const res = await fetch(url, { headers: { Authorization: `Zoho-oauthtoken ${token}` }, cache: "no-store" });
   if (res.status === 204) return [];
   const text = await res.text();
-  if (!res.ok) {
-    let code: string | undefined;
-    try { code = (JSON.parse(text) as ZRec).code as string; } catch { /* non-json */ }
-    throw { code, status: res.status, detail: text.slice(0, 300) } as ZohoError;
-  }
-  try { return ((JSON.parse(text) as { data?: ZRec[] }).data ?? []) as ZRec[]; } catch { return []; }
+  if (!res.ok) throw zohoErr(res.status, text);
+  return zohoData(text);
 }
 
 async function zohoUpdate(module: string, id: string, fields: ZRec): Promise<void> {
@@ -119,11 +115,7 @@ async function zohoUpdate(module: string, id: string, fields: ZRec): Promise<voi
     cache: "no-store",
   });
   const text = await res.text();
-  if (!res.ok) {
-    let code: string | undefined;
-    try { code = (JSON.parse(text) as ZRec).code as string; } catch { /* non-json */ }
-    throw { code, status: res.status, detail: text.slice(0, 300) } as ZohoError;
-  }
+  if (!res.ok) throw zohoErr(res.status, text);
   // A 200 can still carry a per-record failure (e.g. INVALID_DATA).
   try {
     const row = (JSON.parse(text) as { data?: Array<{ code?: string }> }).data?.[0];
@@ -312,8 +304,6 @@ export interface OrgMetrics {
   byColour: { green: number; amber: number; red: number; none: number };
   throughput: { date: string; resolved: number; rejected: number }[];
   unassigned: number;
-  doctorsTotal: number;
-  doctorsAvailable: number;
   slaHours: number;
   sampleCapped: boolean;
   byDoctor: DoctorLoad[];
@@ -412,8 +402,6 @@ export function computeMetrics(waiting: ZRec[], decisions: ZRec[], doctors: Doct
     byColour,
     throughput,
     unassigned,
-    doctorsTotal: doctors.length,
-    doctorsAvailable: doctors.filter((d) => d.available).length,
     slaHours: SLA_HOURS,
     sampleCapped: waiting.length >= SAMPLE_LIMIT || decisions.length >= SAMPLE_LIMIT,
     byDoctor: [...load.values()].filter((l) => l.queued + l.inReview + l.resolved + l.rejected > 0).sort((a, b) => b.waiting - a.waiting || b.queued - a.queued || a.name.localeCompare(b.name)),

@@ -22,7 +22,7 @@ interface Metrics {
   approveRatePct: number | null;
   byColour: { green: number; amber: number; red: number; none: number };
   throughput: { date: string; resolved: number; rejected: number }[];
-  unassigned: number; doctorsTotal: number; doctorsAvailable: number; slaHours: number; sampleCapped: boolean;
+  unassigned: number; slaHours: number; sampleCapped: boolean;
   byDoctor: DoctorLoad[];
 }
 
