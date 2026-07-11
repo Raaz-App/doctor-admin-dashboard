@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+// Demo mode: append `?demo` to the URL to populate the whole dashboard with synthetic data (never Zoho).
+const DEMO = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("demo");
+const withDemo = (path: string) => (DEMO ? path + (path.includes("?") ? "&" : "?") + "demo=1" : path);
+
 interface Doctor { id: string; name: string; phone: string; loginId: string; hasPassword: boolean; available: boolean }
 interface PatientRow { name: string; colour: "green" | "amber" | "red" | null; status: string; id?: string }
 interface Buckets { queued: PatientRow[]; approved: PatientRow[]; rejected: PatientRow[] }
@@ -41,7 +45,7 @@ function useMetrics(): { m: Metrics | null; status: string } {
     const load = async () => {
       const my = ++seq.current;
       try {
-        const res = await fetch("/api/metrics");
+        const res = await fetch(withDemo("/api/metrics"));
         const data = (await res.json().catch(() => ({}))) as Metrics & { message?: string };
         if (!live || my !== seq.current) return; // a newer poll already landed → drop this stale one
         if (res.status !== 200 || !data.totals) setStatus(data.message || "Couldn't load metrics.");
@@ -61,7 +65,7 @@ function useDoctors(): { doctors: Doctor[] | null; status: string; patch: (id: s
   const [status, setStatus] = useState("Loading doctors…");
   const reload = useCallback(async () => {
     try {
-      const res = await fetch("/api/doctors");
+      const res = await fetch(withDemo("/api/doctors"));
       const data = (await res.json().catch(() => ({}))) as { doctors?: Doctor[]; message?: string };
       if (res.status !== 200 || !data.doctors) { setStatus(data.message || "Couldn't load doctors."); return; }
       setDoctors(data.doctors);
@@ -91,8 +95,14 @@ const NAV = [
   { k: "security", label: "Security", icon: "security", title: "Access & credentials", sub: "Manage the dashboard roster and doctor logins." },
 ] as const;
 
+function initialTab(): "home" | "metrics" | "security" {
+  if (typeof window === "undefined") return "home";
+  const t = new URLSearchParams(window.location.search).get("tab");
+  return t === "metrics" || t === "security" ? t : "home";
+}
+
 export function AdminDashboard() {
-  const [tab, setTab] = useState<"home" | "metrics" | "security">("home");
+  const [tab, setTab] = useState<"home" | "metrics" | "security">(initialTab);
   const [focusDoctorId, setFocusDoctorId] = useState<string | null>(null);
   const cur = NAV.find((n) => n.k === tab)!;
   return (
@@ -153,7 +163,8 @@ function Kpi({ label, value, sub, tone, info }: { label: string; value: React.Re
 function Home() {
   const { m, status } = useMetrics();
   if (!m) return <div className={"status" + (status.startsWith("Loading") ? "" : " status--error")}>{status}</div>;
-  const tpMax = Math.max(1, ...m.throughput.map((t) => t.resolved + t.rejected));
+  const tp7 = m.throughput.slice(-7);
+  const tpMax = Math.max(1, ...tp7.map((t) => t.resolved + t.rejected));
   const colTotal = Math.max(1, m.byColour.green + m.byColour.amber + m.byColour.red);
   const wbMax = Math.max(1, ...m.waitBuckets.map((b) => b.count));
   const docWait = [...m.byDoctor].filter((d) => d.waiting > 0).sort((a, b) => b.waiting - a.waiting).slice(0, 8);
@@ -203,7 +214,7 @@ function Home() {
         <div className="panel ov__card">
           <div className="panel__h">Resolved vs rejected · last 7 days <Info text="Daily throughput. Green = resolved (approved), red = returned to concierge, stacked per day (IST)." /></div>
           <div className="spark">
-            {m.throughput.map((t) => (
+            {tp7.map((t) => (
               <div key={t.date} className="spark__col" title={`${t.date}: ${t.resolved} resolved, ${t.rejected} rejected`}>
                 <div className="spark__stack" style={{ height: `${((t.resolved + t.rejected) / tpMax) * 100}%` }}>
                   <div className="spark__seg spark__seg--rej" style={{ flex: t.rejected }} />
@@ -248,26 +259,66 @@ function MetricsModule({ focusDoctorId, setFocusDoctorId }: { focusDoctorId: str
   if (focus) {
     return <DoctorPerformance load={focus} doctors={doctors ?? []} onPatch={patch} onBack={() => { lastFocus.current = null; setFocusDoctorId(null); }} />;
   }
+  const resolved30 = m.throughput.reduce((s, t) => s + t.resolved, 0);
+  const rejected30 = m.throughput.reduce((s, t) => s + t.rejected, 0);
+  const trendMax = Math.max(1, ...m.throughput.map((t) => t.resolved + t.rejected));
+  const maxWait = Math.max(1, ...m.byDoctor.map((d) => d.waiting));
   return (
-    <div className="panel">
-      <div className="panel__h">Doctor performance {m.sampleCapped && <span className="cap">· latest {m.totals.active} scanned</span>} — click a row</div>
-      <div className="tbl-scroll">
-        <table className="tbl">
-          <thead><tr><th>Doctor</th><th>Status</th><th className="num">Queued</th><th className="num">In review</th><th className="num">Waiting</th><th className="num">Avg wait</th><th className="num">Oldest</th><th className="num">Resolved</th><th className="num">Rejected</th></tr></thead>
-          <tbody>
-            {m.byDoctor.map((d) => (
-              <tr key={d.id} className={d.id ? "tbl__click" : ""} onClick={() => d.id && setFocusDoctorId(d.id)}>
-                <td>{d.name}</td>
-                <td><span className={"badge " + (d.available ? "badge--on" : "badge--off")}>{d.available ? "available" : "off"}</span></td>
-                <td className="num">{d.queued}</td><td className="num">{d.inReview}</td>
-                <td className={"num" + (d.oldestWaitMins != null && d.oldestWaitMins > m.slaHours * 60 ? " num--bad" : "")}>{d.waiting}</td>
-                <td className="num">{fmtMins(d.avgWaitMins)}</td><td className="num">{fmtMins(d.oldestWaitMins)}</td>
-                <td className="num">{d.resolved}</td><td className="num">{d.rejected}</td>
-              </tr>
-            ))}
-            {m.byDoctor.length === 0 && <tr><td colSpan={9} className="bucket__empty">No active patients right now.</td></tr>}
-          </tbody>
-        </table>
+    <div className="ov">
+      <div className="kpis">
+        <Kpi label="Active doctors" value={m.byDoctor.length} info="Doctors handling at least one patient in the scanned window." />
+        <Kpi label="Waiting total" value={m.waiting.count} sub={`avg ${fmtMins(m.waiting.avgMins)} · median ${fmtMins(m.waiting.medianMins)}`} tone={m.waiting.count ? "warn" : undefined} info="Everyone still awaiting a decision (Queued + In Review), across all doctors." />
+        <Kpi label={`SLA breaches (>${m.slaHours}h)`} value={m.waiting.breaching} tone={m.waiting.breaching ? "bad" : "good"} info={`Waiting patients past the ${m.slaHours}h SLA.`} />
+        <Kpi label="Approve rate" value={m.approveRatePct == null ? "—" : `${m.approveRatePct}%`} info="Resolved ÷ (Resolved + Rejected) across the scanned decisions." />
+        <Kpi label="Resolved · 30d" value={resolved30} tone="good" info="Total approved in the last 30 days." />
+        <Kpi label="Rejected · 30d" value={rejected30} info="Total returned to concierge in the last 30 days." />
+      </div>
+
+      <div className="panel">
+        <div className="panel__h">Throughput · last 30 days <Info text="Daily decisions — resolved (green) + rejected (red), stacked. Hover a bar for the exact split." /></div>
+        <div className="spark spark--30">
+          {m.throughput.map((t) => (
+            <div key={t.date} className="spark__col" title={`${t.date} · ${t.resolved} resolved, ${t.rejected} rejected`}>
+              <div className="spark__stack" style={{ height: `${((t.resolved + t.rejected) / trendMax) * 100}%` }}>
+                <div className="spark__seg spark__seg--rej" style={{ flex: t.rejected }} />
+                <div className="spark__seg spark__seg--res" style={{ flex: t.resolved }} />
+              </div>
+              <span className="spark__x">{t.date.slice(8)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel__h panel__h--row">
+          <span>Doctor performance {m.sampleCapped && <span className="cap">· latest {m.totals.active} scanned</span>}</span>
+          <span className="cap">click a row to drill in →</span>
+        </div>
+        <div className="tbl-scroll">
+          <table className="tbl">
+            <thead><tr><th>Doctor</th><th>Status</th><th>Backlog</th><th className="num">Queued</th><th className="num">In&nbsp;review</th><th className="num">Avg&nbsp;wait</th><th className="num">Oldest</th><th className="num">Resolved</th><th className="num">Rejected</th><th className="num">Approve</th></tr></thead>
+            <tbody>
+              {m.byDoctor.map((d) => (
+                <tr key={d.id} className="tbl__click" onClick={() => setFocusDoctorId(d.id)}>
+                  <td><span className="tbl__strong">{d.name}</span></td>
+                  <td><span className={"badge " + (d.available ? "badge--on" : "badge--off")}>{d.available ? "available" : "off"}</span></td>
+                  <td>
+                    <div className="minibar">
+                      <div className="minibar__track"><div className={"minibar__fill" + (d.breaching ? " minibar__fill--bad" : "")} style={{ width: `${(d.waiting / maxWait) * 100}%` }} /></div>
+                      <span className="minibar__n">{d.waiting}</span>
+                    </div>
+                  </td>
+                  <td className="num">{d.queued}</td><td className="num">{d.inReview}</td>
+                  <td className="num">{fmtMins(d.avgWaitMins)}</td>
+                  <td className={"num" + (d.breaching ? " num--bad" : "")}>{fmtMins(d.oldestWaitMins)}</td>
+                  <td className="num">{d.resolved}</td><td className="num">{d.rejected}</td>
+                  <td className="num">{d.approveRatePct == null ? "—" : `${d.approveRatePct}%`}</td>
+                </tr>
+              ))}
+              {m.byDoctor.length === 0 && <tr><td colSpan={10} className="bucket__empty">No active patients right now.</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -283,7 +334,7 @@ function DoctorPerformance({ load, doctors, onPatch, onBack }: { load: DoctorLoa
   const loadPatients = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const res = await fetch("/api/doctor-patients", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ doctorId: load.id }) });
+      const res = await fetch("/api/doctor-patients", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ doctorId: load.id, demo: DEMO }) });
       const data = (await res.json().catch(() => ({}))) as Partial<Buckets> & { message?: string };
       if (res.status !== 200) setError(data.message || "Couldn't load patients.");
       else setBuckets({ queued: data.queued ?? [], approved: data.approved ?? [], rejected: data.rejected ?? [] });

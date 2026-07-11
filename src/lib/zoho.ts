@@ -3,7 +3,7 @@
  * dashboard's client. Reads via COQL, writes the Doctors module. Talks to the SAME CRM + fields
  * (Login_Id / Password_Hash on Doctors).
  */
-type ZRec = Record<string, unknown>;
+export type ZRec = Record<string, unknown>;
 
 const ACCOUNTS = process.env.ZOHO_ACCOUNTS_URL || "https://accounts.zoho.in";
 const API = process.env.ZOHO_API_DOMAIN || "https://www.zohoapis.in";
@@ -254,7 +254,8 @@ function zohoDateTime(ms: number): string {
   return new Date(ms + 5.5 * 3600 * 1000).toISOString().replace(/\.\d{3}Z$/, "") + "+05:30";
 }
 
-const DECISION_WINDOW_DAYS = 8; // resolved/returned scanned this far back — covers today + the 7-day chart
+const DECISION_WINDOW_DAYS = 31; // resolved/returned scanned this far back — covers today + the 30-day trend
+const TREND_DAYS = 30; // length of the daily throughput series
 
 /** Currently WAITING patients (Queued / In Review). Ordered OLDEST-first so if the cap is hit it drops
  *  the newest (not-yet-breaching) rows and KEEPS the oldest — the ones SLA/oldest-wait metrics need. */
@@ -321,6 +322,11 @@ export interface OrgMetrics {
 /** Org-wide operational metrics computed from one scan of active contacts + the doctor roster. */
 export async function orgMetrics(): Promise<OrgMetrics> {
   const [waiting, decisions, doctors] = await Promise.all([waitingContacts(), recentDecisions(), listDoctors()]);
+  return computeMetrics(waiting, decisions, doctors);
+}
+
+/** Pure metric computation — shared by the live path and the demo generator. */
+export function computeMetrics(waiting: ZRec[], decisions: ZRec[], doctors: DoctorSummary[]): OrgMetrics {
   const contacts = [...waiting, ...decisions];
   const docMap = new Map(doctors.map((d) => [d.id, d]));
   const load = new Map<string, DoctorLoad>();
@@ -386,8 +392,8 @@ export async function orgMetrics(): Promise<OrgMetrics> {
     l.approveRatePct = dec ? Math.round((l.resolved / dec) * 100) : null;
   }
 
-  const throughput = Array.from({ length: 7 }, (_, i) => {
-    const ymd = istYmd(Date.now() - (6 - i) * 86400000);
+  const throughput = Array.from({ length: TREND_DAYS }, (_, i) => {
+    const ymd = istYmd(Date.now() - (TREND_DAYS - 1 - i) * 86400000);
     return { date: ymd, resolved: tp.get(ymd) ?? 0, rejected: tpRej.get(ymd) ?? 0 };
   });
   const waitBuckets = WAIT_BUCKETS.map((b, i) => ({

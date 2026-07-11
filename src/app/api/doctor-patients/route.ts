@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { doctorPatients } from "@/lib/zoho";
+import { isDemo, demoDoctorPatients } from "@/lib/demo";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ error: "bad_request", message: "A valid doctor id is required." }, { status: 400 });
   }
   try {
+    if (isDemo(req, body)) return NextResponse.json(demoDoctorPatients(doctorId, Date.now()));
     return NextResponse.json(await doctorPatients(doctorId));
   } catch {
     return NextResponse.json({ error: "zoho", message: "Couldn't load this doctor's patients." }, { status: 502 });
