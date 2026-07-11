@@ -1,0 +1,85 @@
+/* Admin dashboard — shares the doctor dashboard's design tokens + look. */
+:root {
+  --fg: #1b2430; --muted: #6b7785; --line: #e6e9ef; --accent: #185165; --accent-2: #11414f;
+  --accent-soft: #eef4f6; --brand-red: #e23744; --bg: #f5f7fa; --card: #ffffff; --chip: #eef2f7;
+  --err-fg: #b42318; --err-bg: #fef3f2; --err-line: #fecdca;
+  --green: #2e8b6f; --amber: #b26a00; --red: #e23744;
+}
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  color: var(--fg); margin: 0; padding: 0 0 40px; background: var(--bg);
+}
+
+/* Header */
+.appbar { padding: 14px 20px; background: var(--accent); color: #fff; display: flex; align-items: center; gap: 10px; }
+.appbar__brand { font-weight: 800; letter-spacing: .01em; }
+.appbar__tag { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  background: rgba(255,255,255,.16); padding: 3px 8px; border-radius: 999px; }
+
+.wrap { max-width: 1120px; margin: 20px auto 0; padding: 0 16px; }
+.status { padding: 14px; color: var(--muted); }
+.status--error { color: var(--err-fg); }
+
+/* Two-pane layout: doctor list + detail */
+.admin { display: grid; grid-template-columns: 320px 1fr; gap: 18px; align-items: start; }
+@media (max-width: 860px) { .admin { grid-template-columns: 1fr; } }
+
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(16,24,40,.04); overflow: hidden; }
+.panel__h { padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em; color: var(--muted); background: #fafbfc; }
+
+/* Doctor list */
+.doclist { max-height: 72vh; overflow: auto; }
+.docitem { display: block; width: 100%; text-align: left; border: none; background: none; cursor: pointer;
+  padding: 12px 16px; border-bottom: 1px solid var(--line); font-family: inherit; }
+.docitem:hover { background: var(--accent-soft); }
+.docitem--active { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.docitem__name { font-weight: 600; font-size: 15px; color: var(--fg); }
+.docitem__meta { color: var(--muted); font-size: 12.5px; margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; }
+.pill { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--chip); color: var(--muted); }
+.pill--set { background: #e7f4ee; color: var(--green); }
+
+.docsearch { width: 100%; padding: 10px 14px; border: none; border-bottom: 1px solid var(--line);
+  font-family: inherit; font-size: 14px; outline: none; }
+
+/* Detail column */
+.detail { display: flex; flex-direction: column; gap: 18px; }
+.detail__empty { padding: 40px 20px; color: var(--muted); text-align: center; }
+.detail__name { font-size: 20px; font-weight: 700; margin: 0; }
+.detail__meta { color: var(--muted); font-size: 14px; margin-top: 2px; }
+
+/* Credential editor */
+.cred { padding: 16px; }
+.cred__row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+.cred__field { flex: 1 1 200px; display: flex; flex-direction: column; gap: 5px; }
+.cred__lbl { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+.cred__input { padding: 10px 12px; border: 1px solid #cdd9e5; border-radius: 8px; font-family: inherit; font-size: 15px; background: #fff; }
+.cred__hint { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+.cred__actions { margin-top: 14px; display: flex; align-items: center; gap: 12px; }
+.btn { padding: 10px 20px; background: var(--accent); color: #fff; border: none; border-radius: 8px; cursor: pointer;
+  font-family: inherit; font-size: 15px; font-weight: 600; }
+.btn:hover { background: var(--accent-2); }
+.btn:disabled { opacity: .55; cursor: default; }
+.msg { font-size: 13.5px; font-weight: 600; }
+.msg--ok { color: var(--green); }
+.msg--err { color: var(--err-fg); }
+
+/* Patient buckets */
+.buckets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+@media (max-width: 720px) { .buckets { grid-template-columns: 1fr; } }
+.bucket__h { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 700;
+  color: var(--fg); padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.bucket__count { font-size: 12px; font-weight: 700; color: var(--muted); background: var(--chip); border-radius: 999px; padding: 1px 8px; }
+.bucket__list { padding: 8px; display: flex; flex-direction: column; gap: 8px; max-height: 56vh; overflow: auto; }
+.bucket__empty { color: var(--muted); font-size: 13px; padding: 10px 6px; }
+
+.pcard { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line);
+  border-radius: 10px; background: #fff; }
+.pcard__dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; background: var(--muted); }
+.pcard--green .pcard__dot { background: var(--green); }
+.pcard--amber .pcard__dot { background: var(--amber); }
+.pcard--red .pcard__dot { background: var(--red); }
+.pcard__name { font-size: 14px; font-weight: 600; }
+.pcard__status { margin-left: auto; font-size: 11px; color: var(--muted); }
